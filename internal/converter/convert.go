@@ -8,19 +8,29 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 )
 
+// sRGBToLinear applies the sRGB transfer function to convert a single
+// sRGB component (0–1) to linear RGB.
+func sRGBToLinear(c float64) float64 {
+	if c <= 0.04045 {
+		return c / 12.92
+	}
+	return math.Pow((c+0.055)/1.055, 2.4)
+}
+
 // Convert maps every pixel of img to the nearest Catppuccin Mocha palette
-// color using CIELAB distance and Floyd-Steinberg dithering.
-// Fully transparent pixels are preserved as-is.
+// color using CIEDE2000 distance and Floyd-Steinberg dithering.
+// Error diffusion happens in sRGB space. Fully transparent pixels are
+// preserved as-is.
 func Convert(img image.Image) *image.NRGBA {
 	bounds := img.Bounds()
 	w := bounds.Dx()
 	h := bounds.Dy()
 
-	// Build float64 pixel buffer in CIELAB space and a parallel alpha buffer.
-	type labPixel struct {
-		L, A, B float64
+	// Float64 pixel buffer in sRGB space (0–255 range) for error diffusion.
+	type rgbPixel struct {
+		R, G, B float64
 	}
-	buf := make([]labPixel, w*h)
+	buf := make([]rgbPixel, w*h)
 	alpha := make([]uint8, w*h)
 
 	for y := 0; y < h; y++ {
@@ -28,7 +38,6 @@ func Convert(img image.Image) *image.NRGBA {
 			r, g, b, a := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
 			idx := y*w + x
 
-			// Store original alpha (pre-multiplied -> straight).
 			a8 := uint8(a >> 8)
 			alpha[idx] = a8
 
@@ -36,15 +45,13 @@ func Convert(img image.Image) *image.NRGBA {
 				continue
 			}
 
-			// Convert pre-multiplied to straight, then to [0,1].
+			// Convert pre-multiplied 16-bit to straight 8-bit sRGB.
 			fa := float64(a)
-			fr := float64(r) / fa
-			fg := float64(g) / fa
-			fb := float64(b) / fa
-
-			col := colorful.Color{R: fr, G: fg, B: fb}
-			l, aa, bb := col.Lab()
-			buf[idx] = labPixel{L: l, A: aa, B: bb}
+			buf[idx] = rgbPixel{
+				R: float64(r) / fa * 255.0,
+				G: float64(g) / fa * 255.0,
+				B: float64(b) / fa * 255.0,
+			}
 		}
 	}
 
@@ -59,18 +66,23 @@ func Convert(img image.Image) *image.NRGBA {
 				continue
 			}
 
-			oldL := buf[idx].L
-			oldA := buf[idx].A
-			oldB := buf[idx].B
+			// Step 4b: clamp to [0, 255].
+			oldR := clamp(buf[idx].R, 0, 255)
+			oldG := clamp(buf[idx].G, 0, 255)
+			oldB := clamp(buf[idx].B, 0, 255)
 
-			// Find nearest palette color in CIELAB.
+			// Step 4c: convert sRGB to colorful.Color (with proper gamma).
+			pixelColor := colorful.Color{
+				R: sRGBToLinear(oldR / 255.0),
+				G: sRGBToLinear(oldG / 255.0),
+				B: sRGBToLinear(oldB / 255.0),
+			}
+
+			// Step 4d: find nearest palette color by CIEDE2000.
 			best := 0
 			bestDist := math.MaxFloat64
 			for i, pc := range MochaPalette {
-				dL := oldL - pc.L
-				dA := oldA - pc.A
-				dB := oldB - pc.Bfield
-				dist := dL*dL + dA*dA + dB*dB
+				dist := pixelColor.DistanceCIEDE2000(pc.Color)
 				if dist < bestDist {
 					bestDist = dist
 					best = i
@@ -79,12 +91,12 @@ func Convert(img image.Image) *image.NRGBA {
 
 			pc := MochaPalette[best]
 
-			// Compute quantisation error in CIELAB.
-			errL := oldL - pc.L
-			errA := oldA - pc.A
-			errB := oldB - pc.Bfield
+			// Step 4e: quantization error in sRGB space.
+			errR := oldR - float64(pc.R)
+			errG := oldG - float64(pc.G)
+			errB := oldB - float64(pc.B)
 
-			// Floyd-Steinberg error diffusion.
+			// Step 4f: Floyd-Steinberg error diffusion.
 			diffuse := func(dx, dy int, factor float64) {
 				nx, ny := x+dx, y+dy
 				if nx < 0 || nx >= w || ny < 0 || ny >= h {
@@ -94,8 +106,8 @@ func Convert(img image.Image) *image.NRGBA {
 				if alpha[ni] == 0 {
 					return
 				}
-				buf[ni].L += errL * factor
-				buf[ni].A += errA * factor
+				buf[ni].R += errR * factor
+				buf[ni].G += errG * factor
 				buf[ni].B += errB * factor
 			}
 
@@ -104,6 +116,7 @@ func Convert(img image.Image) *image.NRGBA {
 			diffuse(0, 1, 5.0/16.0)
 			diffuse(1, 1, 1.0/16.0)
 
+			// Step 4g: write palette color to output.
 			out.SetNRGBA(bounds.Min.X+x, bounds.Min.Y+y, color.NRGBA{
 				R: pc.R,
 				G: pc.G,
@@ -114,4 +127,14 @@ func Convert(img image.Image) *image.NRGBA {
 	}
 
 	return out
+}
+
+func clamp(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

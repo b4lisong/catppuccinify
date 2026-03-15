@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"image"
 	"image/png"
 	"log"
@@ -13,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "image/gif"
 	_ "image/jpeg"
 
 	_ "golang.org/x/image/webp"
@@ -44,7 +42,7 @@ func main() {
 			f, err := os.Open(j.InputPath)
 			if err != nil {
 				j.Status = job.StatusFailed
-				j.Error = fmt.Sprintf("open input: %v", err)
+				j.Error = "Conversion failed. Please try again"
 				return
 			}
 			defer f.Close()
@@ -52,24 +50,24 @@ func main() {
 			img, _, err := image.Decode(f)
 			if err != nil {
 				j.Status = job.StatusFailed
-				j.Error = fmt.Sprintf("decode image: %v", err)
+				j.Error = "Could not read image. File may be corrupted"
 				return
 			}
 
 			result := converter.Convert(img)
 
-			outPath := filepath.Join(tempDir, j.ID+".png")
+			outPath := filepath.Join(tempDir, j.ID+"_output.png")
 			out, err := os.Create(outPath)
 			if err != nil {
 				j.Status = job.StatusFailed
-				j.Error = fmt.Sprintf("create output: %v", err)
+				j.Error = "Conversion failed. Please try again"
 				return
 			}
 			defer out.Close()
 
 			if err := png.Encode(out, result); err != nil {
 				j.Status = job.StatusFailed
-				j.Error = fmt.Sprintf("encode png: %v", err)
+				j.Error = "Conversion failed. Please try again"
 				return
 			}
 

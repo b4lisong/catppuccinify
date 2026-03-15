@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/balisong/catppuccinify/internal/job"
 )
@@ -19,23 +18,25 @@ type Handler struct {
 	ProcessFunc func(j *job.Job)
 }
 
+// jsonError writes a JSON error response.
+func jsonError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // HandleConvert accepts an image upload and queues a conversion job.
 func (h *Handler) HandleConvert(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "file too large or bad form data", http.StatusBadRequest)
+		jsonError(w, "File exceeds maximum size of 10 MB", http.StatusBadRequest)
 		return
 	}
 
-	file, header, err := r.FormFile("file")
+	file, header, err := r.FormFile("image")
 	if err != nil {
-		http.Error(w, "missing file field", http.StatusBadRequest)
+		jsonError(w, "No image file provided", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -44,36 +45,48 @@ func (h *Handler) HandleConvert(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 512)
 	n, err := file.Read(buf)
 	if err != nil && err != io.EOF {
-		http.Error(w, "failed to read file", http.StatusInternalServerError)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	contentType := http.DetectContentType(buf[:n])
-	if !strings.HasPrefix(contentType, "image/") {
-		http.Error(w, "file is not an image", http.StatusBadRequest)
+	if contentType != "image/png" && contentType != "image/jpeg" && contentType != "image/webp" {
+		jsonError(w, "Unsupported format. Please upload PNG, JPEG, or WebP", http.StatusBadRequest)
 		return
 	}
 
 	// Seek back to beginning after sniffing.
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		http.Error(w, "failed to read file", http.StatusInternalServerError)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Save to temp dir with a unique name.
+	// Save to temp dir with job-based naming.
 	ext := filepath.Ext(header.Filename)
-	tmpFile, err := os.CreateTemp(h.TempDir, "upload-*"+ext)
+	if ext == "" {
+		ext = ".bin"
+	}
+
+	j := h.Store.Create("", header.Filename)
+
+	inputPath := filepath.Join(h.TempDir, j.ID+"_original"+ext)
+	tmpFile, err := os.Create(inputPath)
 	if err != nil {
-		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		h.Store.Delete(j.ID)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer tmpFile.Close()
 
 	if _, err := io.Copy(tmpFile, file); err != nil {
-		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		tmpFile.Close()
+		os.Remove(inputPath)
+		h.Store.Delete(j.ID)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	tmpFile.Close()
 
-	j := h.Store.Create(tmpFile.Name(), header.Filename)
+	j.InputPath = inputPath
+	h.Store.Update(j)
 
 	go func() {
 		j.Status = job.StatusProcessing
@@ -105,17 +118,20 @@ func (h *Handler) HandleConvert(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("job_id")
 	if jobID == "" {
-		http.Error(w, "missing job_id", http.StatusBadRequest)
+		jsonError(w, "Job not found or expired", http.StatusNotFound)
 		return
 	}
 
 	j, ok := h.Store.Get(jobID)
 	if !ok {
-		http.Error(w, "job not found", http.StatusNotFound)
+		jsonError(w, "Job not found or expired", http.StatusNotFound)
 		return
 	}
 
-	resp := map[string]string{"status": string(j.Status)}
+	resp := map[string]string{
+		"job_id": j.ID,
+		"status": string(j.Status),
+	}
 	if j.Status == job.StatusFailed {
 		resp["error"] = j.Error
 	}
@@ -128,30 +144,21 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleDownload(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("job_id")
 	if jobID == "" {
-		http.Error(w, "missing job_id", http.StatusBadRequest)
+		jsonError(w, "Job not found or expired", http.StatusNotFound)
 		return
 	}
 
 	j, ok := h.Store.Get(jobID)
 	if !ok {
-		http.Error(w, "job not found", http.StatusNotFound)
+		jsonError(w, "Job not found or expired", http.StatusNotFound)
 		return
 	}
 
 	if j.Status != job.StatusDone {
-		http.Error(w, "job not done", http.StatusBadRequest)
+		jsonError(w, "Image is still processing", http.StatusConflict)
 		return
 	}
 
-	// Replace original extension with .png for the download name.
-	name := j.InputName
-	ext := filepath.Ext(name)
-	if ext != "" {
-		name = strings.TrimSuffix(name, ext) + ".png"
-	} else {
-		name = name + ".png"
-	}
-
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
+	w.Header().Set("Content-Disposition", `attachment; filename="catppuccinified.png"`)
 	http.ServeFile(w, r, j.OutputPath)
 }

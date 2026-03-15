@@ -87,18 +87,20 @@ The palette consists of 26 colors. All hex values below are definitive and must 
 
 ### 5.1 Overview
 
-The algorithm converts every pixel in the input image to its perceptually nearest color in the Catppuccin Mocha palette, using CIELAB color space for distance calculations and Floyd-Steinberg dithering to reduce posterization artifacts.
+The algorithm converts every pixel in the input image to its perceptually nearest color in the Catppuccin Mocha palette, using the **CIEDE2000** color difference formula for distance calculations and Floyd-Steinberg dithering to reduce posterization artifacts.
+
+**Why CIEDE2000 over Euclidean distance in CIELAB:** The Catppuccin Mocha palette has only blue-purple-tinted dark colors (Surface 0 through Crust). Plain Euclidean distance in CIELAB weights lightness and chrominance equally, which causes dark warm-toned pixels (brown shadows, dark reds) to either jump to brighter accent colors with closer hue, or map to the dark surface colors with an unwanted blue-purple cast. CIEDE2000 accounts for the fact that human eyes are more sensitive to lightness differences in dark regions and to hue differences in certain color ranges. This produces significantly better shadow rendering without requiring hand-tuned weight parameters. `go-colorful` provides `DistanceCIEDE2000()` directly.
 
 ### 5.2 Steps
 
 1. **Decode the input image.** Accept PNG, JPEG, or WebP. Decode into a standard Go `image.Image`.
-2. **Pre-convert the Mocha palette to CIELAB.** At application startup (or package init), convert all 26 Mocha sRGB colors to CIELAB coordinates using `go-colorful`. Store these as a lookup table. This is done once, not per-request.
+2. **Pre-convert the Mocha palette to `go-colorful` Color values.** At application startup (or package init), convert all 26 Mocha sRGB hex values to `colorful.Color` objects using `colorful.Hex()`. Store these as a lookup table. CIEDE2000 internally uses CIELAB, and `go-colorful` handles the conversion transparently. This is done once, not per-request.
 3. **Create a mutable working copy** of the image as a floating-point pixel buffer (to handle dithering error diffusion, which can produce intermediate values outside 0-255). A `[][]float64` buffer (or equivalent struct with R, G, B float channels) sized to image dimensions.
 4. **Iterate over pixels left-to-right, top-to-bottom** (scanline order, required for Floyd-Steinberg):
    - a. Read the current pixel's (potentially error-adjusted) RGB values from the working buffer.
    - b. Clamp the RGB values to [0, 255].
-   - c. Convert the clamped sRGB value to CIELAB using `go-colorful`.
-   - d. Compute the Euclidean distance in CIELAB space between this pixel and each of the 26 palette colors. Select the palette color with the smallest distance. (With only 26 colors, brute-force linear search is the correct approach — no spatial index needed.)
+   - c. Convert the clamped sRGB value to a `colorful.Color` using `colorful.LinearRgb()` or by constructing from R/G/B (ensuring proper sRGB gamma handling via `go-colorful`).
+   - d. Compute the **CIEDE2000** color difference between this pixel and each of the 26 palette colors using `colorful.Color.DistanceCIEDE2000()`. Select the palette color with the smallest CIEDE2000 distance. (With only 26 colors, brute-force linear search is the correct approach — no spatial index needed. CIEDE2000 is ~3x more expensive than Euclidean CIELAB per comparison, but 26 comparisons per pixel is still trivially fast.)
    - e. **Compute the quantization error:** `error = original_pixel_RGB - chosen_palette_color_RGB` (per channel, in sRGB space — dithering is applied in sRGB, not CIELAB).
    - f. **Diffuse the error** to neighboring pixels using the Floyd-Steinberg kernel:
      ```
@@ -115,8 +117,8 @@ If the input image has an alpha channel, preserve it as-is. Only the RGB channel
 
 ### 5.4 Performance Notes
 
-- The palette CIELAB lookup table is computed once at startup. Do not recompute per-request.
-- For a 3840×2160 image with 26 palette colors, this is ~8.3M pixel × 26 distance calculations — straightforward and fast in Go. No goroutine-level parallelism is required for the pixel loop itself (Floyd-Steinberg is inherently sequential due to error diffusion dependencies). However, multiple concurrent requests are naturally handled by Go's HTTP server goroutines.
+- The palette lookup table is computed once at startup. Do not recompute per-request.
+- For a 3840×2160 image with 26 palette colors, this is ~8.3M pixels × 26 CIEDE2000 distance calculations. CIEDE2000 is more expensive than Euclidean CIELAB (~3x per comparison), but at 26 colors per pixel this is still well within acceptable performance in Go. No goroutine-level parallelism is required for the pixel loop itself (Floyd-Steinberg is inherently sequential due to error diffusion dependencies). However, multiple concurrent requests are naturally handled by Go's HTTP server goroutines.
 - Image decode and encode are the likely bottlenecks, not the palette matching.
 
 ---
@@ -355,16 +357,14 @@ This is an in-memory system with no database, but the data model is still well-d
 
 #### PaletteColor
 
-| Field   | Type      | Description                                  |
-|---------|-----------|----------------------------------------------|
-| `Name`  | `string`  | Human-readable name (e.g., "Rosewater")      |
-| `Hex`   | `string`  | Hex color code                               |
-| `R`     | `uint8`   | sRGB red component                           |
-| `G`     | `uint8`   | sRGB green component                         |
-| `B`     | `uint8`   | sRGB blue component                          |
-| `L`     | `float64` | CIELAB L* component (precomputed at startup) |
-| `A`     | `float64` | CIELAB a* component (precomputed at startup) |
-| `BLab`  | `float64` | CIELAB b* component (precomputed at startup) |
+| Field   | Type             | Description                                        |
+|---------|------------------|----------------------------------------------------|
+| `Name`  | `string`         | Human-readable name (e.g., "Rosewater")            |
+| `Hex`   | `string`         | Hex color code                                     |
+| `R`     | `uint8`          | sRGB red component                                 |
+| `G`     | `uint8`          | sRGB green component                               |
+| `B`     | `uint8`          | sRGB blue component                                |
+| `Color` | `colorful.Color` | `go-colorful` Color (precomputed at startup; used for CIEDE2000 distance) |
 
 ### 10.2 Relationships
 

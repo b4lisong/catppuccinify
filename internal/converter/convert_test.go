@@ -7,7 +7,7 @@ import (
 )
 
 // TestSinglePixelRedMapping verifies that a pure red pixel maps to the
-// nearest Catppuccin Mocha color (expected: Red #f38ba8).
+// nearest Catppuccin Mocha color via CIEDE2000.
 func TestSinglePixelRedMapping(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	img.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
@@ -15,13 +15,11 @@ func TestSinglePixelRedMapping(t *testing.T) {
 	out := Convert(img)
 	c := out.NRGBAAt(0, 0)
 
-	// With a single pixel there is no dithering, so the output must be
-	// exactly the nearest palette entry.
 	found := false
 	for _, pc := range MochaPalette {
 		if pc.R == c.R && pc.G == c.G && pc.B == c.B {
 			found = true
-			t.Logf("pure red mapped to %s (#%02x%02x%02x)", pc.Name, pc.R, pc.G, pc.B)
+			t.Logf("pure red mapped to %s (%s)", pc.Name, pc.Hex)
 			break
 		}
 	}
@@ -85,5 +83,34 @@ func TestAlphaPreservation(t *testing.T) {
 	}
 	if a := out.NRGBAAt(2, 0).A; a != 255 {
 		t.Errorf("opaque pixel alpha: got %d, want 255", a)
+	}
+}
+
+// TestBoundaryConditions verifies that dithering doesn't panic on edge
+// pixels where some Floyd-Steinberg neighbors are out of bounds.
+func TestBoundaryConditions(t *testing.T) {
+	// 1x1 image: no neighbors at all.
+	img1 := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img1.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 128, A: 255})
+	out1 := Convert(img1)
+	c := out1.NRGBAAt(0, 0)
+	if c.A != 255 {
+		t.Errorf("1x1 image: expected alpha 255, got %d", c.A)
+	}
+
+	// 2x2 image: corners have limited neighbors.
+	img2 := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			img2.SetNRGBA(x, y, color.NRGBA{R: 100, G: 50, B: 200, A: 255})
+		}
+	}
+	out2 := Convert(img2)
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			if out2.NRGBAAt(x, y).A != 255 {
+				t.Errorf("2x2 pixel (%d,%d): expected alpha 255", x, y)
+			}
+		}
 	}
 }
