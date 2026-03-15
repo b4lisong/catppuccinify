@@ -17,7 +17,6 @@
             go
             gopls
             gotools
-            go-tools # staticcheck
             delve
           ];
 
