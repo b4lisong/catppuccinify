@@ -7,3 +7,6 @@ result-*
 
 # Go
 .go/
+
+# Claude Code
+.claude/
