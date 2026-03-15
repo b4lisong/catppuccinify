@@ -27,6 +27,7 @@ type Job struct {
 	InputPath  string
 	OutputPath string
 	InputName  string
+	Flavor     string
 }
 
 // Store provides thread-safe storage for jobs.
@@ -35,7 +36,7 @@ type Store struct {
 }
 
 // Create initialises a new pending job and stores it.
-func (s *Store) Create(inputPath, inputName string) *Job {
+func (s *Store) Create(inputPath, inputName, flavor string) *Job {
 	id := generateUUID()
 	j := &Job{
 		ID:        id,
@@ -43,6 +44,7 @@ func (s *Store) Create(inputPath, inputName string) *Job {
 		CreatedAt: time.Now(),
 		InputPath: inputPath,
 		InputName: inputName,
+		Flavor:    flavor,
 	}
 	s.m.Store(id, j)
 	return j

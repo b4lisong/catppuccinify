@@ -15,7 +15,7 @@ func TestSinglePixelRedMapping(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	img.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
 
-	out := Convert(img, nil)
+	out := Convert(img, MochaPalette, nil)
 	c := out.NRGBAAt(0, 0)
 
 	found := false
@@ -52,7 +52,7 @@ func TestAllOutputPixelsAreValid(t *testing.T) {
 		paletteSet[[3]uint8{pc.R, pc.G, pc.B}] = true
 	}
 
-	out := Convert(img, nil)
+	out := Convert(img, MochaPalette, nil)
 	bounds := out.Bounds()
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
@@ -76,7 +76,7 @@ func TestAlphaPreservation(t *testing.T) {
 	img.SetNRGBA(1, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 128}) // semi-opaque
 	img.SetNRGBA(2, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 255}) // opaque
 
-	out := Convert(img, nil)
+	out := Convert(img, MochaPalette, nil)
 
 	if a := out.NRGBAAt(0, 0).A; a != 0 {
 		t.Errorf("transparent pixel alpha: got %d, want 0", a)
@@ -95,7 +95,7 @@ func TestBoundaryConditions(t *testing.T) {
 	// 1x1 image: no neighbors at all.
 	img1 := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	img1.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 128, A: 255})
-	out1 := Convert(img1, nil)
+	out1 := Convert(img1, MochaPalette, nil)
 	c := out1.NRGBAAt(0, 0)
 	if c.A != 255 {
 		t.Errorf("1x1 image: expected alpha 255, got %d", c.A)
@@ -108,7 +108,7 @@ func TestBoundaryConditions(t *testing.T) {
 			img2.SetNRGBA(x, y, color.NRGBA{R: 100, G: 50, B: 200, A: 255})
 		}
 	}
-	out2 := Convert(img2, nil)
+	out2 := Convert(img2, MochaPalette, nil)
 	for y := 0; y < 2; y++ {
 		for x := 0; x < 2; x++ {
 			if out2.NRGBAAt(x, y).A != 255 {
@@ -142,6 +142,48 @@ func TestDistanceCIEDE2000Lab(t *testing.T) {
 	}
 }
 
+// TestAllFlavorsConvert verifies that converting with each flavor produces
+// valid output without panics and all pixels are valid palette colors.
+func TestAllFlavorsConvert(t *testing.T) {
+	const size = 4
+	img := image.NewNRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(x * 64),
+				G: uint8(y * 64),
+				B: 128,
+				A: 255,
+			})
+		}
+	}
+
+	for _, flavor := range []Flavor{Latte, Frappe, Macchiato, Mocha} {
+		palette := Palettes[flavor]
+		t.Run(string(flavor), func(t *testing.T) {
+			paletteSet := make(map[[3]uint8]bool, len(palette))
+			for _, pc := range palette {
+				paletteSet[[3]uint8{pc.R, pc.G, pc.B}] = true
+			}
+
+			out := Convert(img, palette, nil)
+			bounds := out.Bounds()
+			for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+				for x := bounds.Min.X; x < bounds.Max.X; x++ {
+					c := out.NRGBAAt(x, y)
+					if c.A == 0 {
+						continue
+					}
+					key := [3]uint8{c.R, c.G, c.B}
+					if !paletteSet[key] {
+						t.Fatalf("pixel (%d,%d) = (%d,%d,%d) is not a %s palette color", x, y, c.R, c.G, c.B, flavor)
+					}
+				}
+			}
+		})
+	}
+}
+
 func makeGradientImage(size int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for y := 0; y < size; y++ {
@@ -161,7 +203,7 @@ func BenchmarkConvert(b *testing.B) {
 	img := makeGradientImage(256)
 	b.ResetTimer()
 	for b.Loop() {
-		Convert(img, nil)
+		Convert(img, MochaPalette, nil)
 	}
 }
 
@@ -169,6 +211,6 @@ func BenchmarkConvertLarge(b *testing.B) {
 	img := makeGradientImage(1024)
 	b.ResetTimer()
 	for b.Loop() {
-		Convert(img, nil)
+		Convert(img, MochaPalette, nil)
 	}
 }

@@ -67,7 +67,8 @@ func (h *Handler) HandleConvert(w http.ResponseWriter, r *http.Request) {
 		ext = ".bin"
 	}
 
-	j := h.Store.Create("", header.Filename)
+	flavor := r.FormValue("flavor")
+	j := h.Store.Create("", header.Filename, flavor)
 
 	inputPath := filepath.Join(h.TempDir, j.ID+"_original"+ext)
 	tmpFile, err := os.Create(inputPath)

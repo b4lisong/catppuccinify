@@ -119,11 +119,11 @@ func distanceCIEDE2000Lab(l1, a1, b1, l2, a2, b2 float64) float64 {
 	return math.Sqrt(sq(deltaLp/sl)+sq(deltaCp/sc)+sq(deltaHp/sh)+rt*(deltaCp/sc)*(deltaHp/sh)) * 0.01
 }
 
-// Convert maps every pixel of img to the nearest Catppuccin Mocha palette
+// Convert maps every pixel of img to the nearest Catppuccin palette
 // color using CIEDE2000 distance and Floyd-Steinberg dithering.
 // Error diffusion happens in sRGB space. Fully transparent pixels are
 // preserved as-is.
-func Convert(img image.Image, onProgress func(percent int)) *image.NRGBA {
+func Convert(img image.Image, palette []PaletteColor, onProgress func(percent int)) *image.NRGBA {
 	bounds := img.Bounds()
 	w := bounds.Dx()
 	h := bounds.Dy()
@@ -211,7 +211,7 @@ func Convert(img image.Image, onProgress func(percent int)) *image.NRGBA {
 			// Find nearest palette color by CIEDE2000 using precomputed Lab values.
 			best := 0
 			bestDist := math.MaxFloat64
-			for i, pc := range MochaPalette {
+			for i, pc := range palette {
 				dist := distanceCIEDE2000Lab(pl, pa, pb, pc.LabL, pc.LabA, pc.LabB)
 				if dist < bestDist {
 					bestDist = dist
@@ -219,7 +219,7 @@ func Convert(img image.Image, onProgress func(percent int)) *image.NRGBA {
 				}
 			}
 
-			pc := MochaPalette[best]
+			pc := palette[best]
 
 			// Quantization error in sRGB space.
 			errR := oldR - float64(pc.R)

@@ -163,6 +163,23 @@
       color: var(--red);
     }
 
+    /* Flavor dropdown */
+    .flavor-select {
+      background-color: var(--surface0);
+      color: var(--text);
+      border: 1px solid var(--surface1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      outline: none;
+      appearance: auto;
+    }
+
+    .flavor-select:hover {
+      border-color: var(--mauve);
+    }
+
     /* Buttons */
     .btn {
       display: inline-flex;
@@ -334,7 +351,7 @@
   <div class="container">
     <div class="header">
       <h1>Catppuccinify</h1>
-      <p>Convert any image to the Catppuccin Mocha palette</p>
+      <p>Convert any image to the Catppuccin palette</p>
     </div>
 
     <div class="card">
@@ -354,6 +371,12 @@
           <div class="preview-size" id="preview-size"></div>
         </div>
         <button class="preview-clear" id="preview-clear" title="Remove">&times;</button>
+        <select id="flavor-select" class="flavor-select">
+          <option value="latte">Latte</option>
+          <option value="frappe">Frapp&eacute;</option>
+          <option value="macchiato">Macchiato</option>
+          <option value="mocha" selected>Mocha</option>
+        </select>
         <button class="btn btn-mauve" id="convert-btn">Catppuccinify!</button>
       </div>
 
@@ -528,6 +551,7 @@
       try {
         const formData = new FormData();
         formData.append('image', selectedFile);
+        formData.append('flavor', document.getElementById('flavor-select').value);
 
         const res = await fetch('/api/convert', {
           method: 'POST',

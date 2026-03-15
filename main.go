@@ -58,7 +58,15 @@ func main() {
 				return
 			}
 
-			result := converter.Convert(img, func(percent int) {
+			palette, ok := converter.PaletteForFlavor(j.Flavor)
+			if !ok {
+				j.Status = job.StatusFailed
+				j.Error = "Unknown color scheme"
+				log.Printf("job %s: unknown flavor %q", j.ID, j.Flavor)
+				return
+			}
+
+			result := converter.Convert(img, palette, func(percent int) {
 				j.Progress = percent
 				store.Update(j)
 				log.Printf("job %s: %d%% complete", j.ID, percent)
