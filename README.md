@@ -8,6 +8,9 @@
 
 Image credit: [Claire Lin](https://wall.alphacoders.com/big.php?i=1147913)
 
+<p>
+  <img src="img/web0.jpg" alt="Web interface">
+</p>
 
 A web application that re-colors any image using the [Catppuccin](https://github.com/catppuccin/catppuccin) color palette. Upload a PNG, JPEG, or WebP image, pick a flavor, and download the result — every pixel mapped to one of 26 hand-curated pastel tones.
 
