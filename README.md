@@ -4,6 +4,8 @@
   <img src="img/cat0-orig-640.jpg" alt="Original" width="320">
   <img src="img/cat0-conv-640.png" alt="Catppuccinified" width="320">
 </p>
+Image credit: [Claire Lin](https://wall.alphacoders.com/big.php?i=1147913)
+
 
 A web application that re-colors any image using the [Catppuccin](https://github.com/catppuccin/catppuccin) color palette. Upload a PNG, JPEG, or WebP image, pick a flavor, and download the result — every pixel mapped to one of 26 hand-curated pastel tones.
 
