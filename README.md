@@ -1,5 +1,7 @@
 # Catppuccinify
 
+![Original](img/cat0-orig-640.jpg) ![Catppuccinified](img/cat0-conv-640.png)
+
 A web application that re-colors any image using the [Catppuccin](https://github.com/catppuccin/catppuccin) color palette. Upload a PNG, JPEG, or WebP image, pick a flavor, and download the result — every pixel mapped to one of 26 hand-curated pastel tones.
 
 ## Inspiration
