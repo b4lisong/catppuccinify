@@ -3,7 +3,10 @@ package converter
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
+
+	"github.com/lucasb-eyer/go-colorful"
 )
 
 // TestSinglePixelRedMapping verifies that a pure red pixel maps to the
@@ -112,5 +115,60 @@ func TestBoundaryConditions(t *testing.T) {
 				t.Errorf("2x2 pixel (%d,%d): expected alpha 255", x, y)
 			}
 		}
+	}
+}
+
+// TestDistanceCIEDE2000Lab verifies that our inlined CIEDE2000 formula
+// matches go-colorful's DistanceCIEDE2000 for several color pairs.
+func TestDistanceCIEDE2000Lab(t *testing.T) {
+	pairs := [][2]colorful.Color{
+		{colorful.Color{R: 1, G: 0, B: 0}, colorful.Color{R: 0, G: 1, B: 0}},
+		{colorful.Color{R: 0, G: 0, B: 1}, colorful.Color{R: 1, G: 1, B: 0}},
+		{colorful.Color{R: 0.5, G: 0.5, B: 0.5}, colorful.Color{R: 0.2, G: 0.3, B: 0.8}},
+		{colorful.Color{R: 0, G: 0, B: 0}, colorful.Color{R: 1, G: 1, B: 1}},
+		{colorful.Color{R: 0.9, G: 0.1, B: 0.5}, colorful.Color{R: 0.1, G: 0.9, B: 0.5}},
+	}
+
+	for i, pair := range pairs {
+		expected := pair[0].DistanceCIEDE2000(pair[1])
+
+		l1, a1, b1 := pair[0].Lab()
+		l2, a2, b2 := pair[1].Lab()
+		got := distanceCIEDE2000Lab(l1*100, a1*100, b1*100, l2*100, a2*100, b2*100)
+
+		if math.Abs(got-expected) > 1e-10 {
+			t.Errorf("pair %d: distanceCIEDE2000Lab = %v, want %v (diff %v)", i, got, expected, math.Abs(got-expected))
+		}
+	}
+}
+
+func makeGradientImage(size int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(x * 255 / size),
+				G: uint8(y * 255 / size),
+				B: uint8((x + y) * 128 / size),
+				A: 255,
+			})
+		}
+	}
+	return img
+}
+
+func BenchmarkConvert(b *testing.B) {
+	img := makeGradientImage(256)
+	b.ResetTimer()
+	for b.Loop() {
+		Convert(img, nil)
+	}
+}
+
+func BenchmarkConvertLarge(b *testing.B) {
+	img := makeGradientImage(1024)
+	b.ResetTimer()
+	for b.Loop() {
+		Convert(img, nil)
 	}
 }

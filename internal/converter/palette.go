@@ -6,10 +6,11 @@ import (
 
 // PaletteColor represents a single Catppuccin palette color.
 type PaletteColor struct {
-	Name  string
-	Hex   string
-	R, G, B uint8
-	Color colorful.Color // precomputed at startup for CIEDE2000 distance
+	Name        string
+	Hex         string
+	R, G, B     uint8
+	Color       colorful.Color // precomputed at startup for CIEDE2000 distance
+	LabL, LabA, LabB float64   // precomputed Lab values scaled to 0-100 range
 }
 
 // MochaPalette contains all 26 Catppuccin Mocha colors.
@@ -54,6 +55,7 @@ func init() {
 	for i, c := range colors {
 		col, _ := colorful.Hex(c.hex)
 		r, g, b := col.RGB255()
+		l, a, bVal := col.Lab()
 		MochaPalette[i] = PaletteColor{
 			Name:  c.name,
 			Hex:   c.hex,
@@ -61,6 +63,9 @@ func init() {
 			G:     g,
 			B:     b,
 			Color: col,
+			LabL:  l * 100.0,
+			LabA:  a * 100.0,
+			LabB:  bVal * 100.0,
 		}
 	}
 }

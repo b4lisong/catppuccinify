@@ -74,7 +74,7 @@ func main() {
 			}
 			defer out.Close()
 
-			if err := png.Encode(out, result); err != nil {
+			if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(out, result); err != nil {
 				j.Status = job.StatusFailed
 				j.Error = "Conversion failed. Please try again"
 				log.Printf("job %s: failed: %v", j.ID, err)
