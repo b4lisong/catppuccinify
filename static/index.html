@@ -359,7 +359,7 @@
 
       <div class="spinner-section" id="spinner-section">
         <div class="spinner"></div>
-        <div class="spinner-text">Converting your image&hellip;</div>
+        <div class="spinner-text" id="spinner-text">Converting your image&hellip;</div>
       </div>
 
       <div class="error-message" id="error-message"></div>
@@ -397,6 +397,7 @@
     const previewClear = document.getElementById('preview-clear');
     const convertBtn = document.getElementById('convert-btn');
     const spinnerSection = document.getElementById('spinner-section');
+    const spinnerText = document.getElementById('spinner-text');
     const errorMessage = document.getElementById('error-message');
     const resultSection = document.getElementById('result-section');
     const resultOriginal = document.getElementById('result-original');
@@ -559,6 +560,10 @@
           }
 
           const data = await res.json();
+
+          if (data.progress !== undefined) {
+            spinnerText.textContent = 'Converting your image\u2026 ' + data.progress + '%';
+          }
 
           if (data.status === 'done') {
             clearInterval(pollTimer);

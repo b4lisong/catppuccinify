@@ -12,7 +12,7 @@ func TestSinglePixelRedMapping(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	img.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
 
-	out := Convert(img)
+	out := Convert(img, nil)
 	c := out.NRGBAAt(0, 0)
 
 	found := false
@@ -49,7 +49,7 @@ func TestAllOutputPixelsAreValid(t *testing.T) {
 		paletteSet[[3]uint8{pc.R, pc.G, pc.B}] = true
 	}
 
-	out := Convert(img)
+	out := Convert(img, nil)
 	bounds := out.Bounds()
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
@@ -73,7 +73,7 @@ func TestAlphaPreservation(t *testing.T) {
 	img.SetNRGBA(1, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 128}) // semi-opaque
 	img.SetNRGBA(2, 0, color.NRGBA{R: 200, G: 100, B: 50, A: 255}) // opaque
 
-	out := Convert(img)
+	out := Convert(img, nil)
 
 	if a := out.NRGBAAt(0, 0).A; a != 0 {
 		t.Errorf("transparent pixel alpha: got %d, want 0", a)
@@ -92,7 +92,7 @@ func TestBoundaryConditions(t *testing.T) {
 	// 1x1 image: no neighbors at all.
 	img1 := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	img1.SetNRGBA(0, 0, color.NRGBA{R: 128, G: 128, B: 128, A: 255})
-	out1 := Convert(img1)
+	out1 := Convert(img1, nil)
 	c := out1.NRGBAAt(0, 0)
 	if c.A != 255 {
 		t.Errorf("1x1 image: expected alpha 255, got %d", c.A)
@@ -105,7 +105,7 @@ func TestBoundaryConditions(t *testing.T) {
 			img2.SetNRGBA(x, y, color.NRGBA{R: 100, G: 50, B: 200, A: 255})
 		}
 	}
-	out2 := Convert(img2)
+	out2 := Convert(img2, nil)
 	for y := 0; y < 2; y++ {
 		for x := 0; x < 2; x++ {
 			if out2.NRGBAAt(x, y).A != 255 {

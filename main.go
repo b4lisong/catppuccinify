@@ -39,10 +39,13 @@ func main() {
 		Store:   store,
 		TempDir: tempDir,
 		ProcessFunc: func(j *job.Job) {
+			log.Printf("job %s: started", j.ID)
+
 			f, err := os.Open(j.InputPath)
 			if err != nil {
 				j.Status = job.StatusFailed
 				j.Error = "Conversion failed. Please try again"
+				log.Printf("job %s: failed: %v", j.ID, err)
 				return
 			}
 			defer f.Close()
@@ -51,16 +54,22 @@ func main() {
 			if err != nil {
 				j.Status = job.StatusFailed
 				j.Error = "Could not read image. File may be corrupted"
+				log.Printf("job %s: failed: %v", j.ID, err)
 				return
 			}
 
-			result := converter.Convert(img)
+			result := converter.Convert(img, func(percent int) {
+				j.Progress = percent
+				store.Update(j)
+				log.Printf("job %s: %d%% complete", j.ID, percent)
+			})
 
 			outPath := filepath.Join(tempDir, j.ID+"_output.png")
 			out, err := os.Create(outPath)
 			if err != nil {
 				j.Status = job.StatusFailed
 				j.Error = "Conversion failed. Please try again"
+				log.Printf("job %s: failed: %v", j.ID, err)
 				return
 			}
 			defer out.Close()
@@ -68,10 +77,12 @@ func main() {
 			if err := png.Encode(out, result); err != nil {
 				j.Status = job.StatusFailed
 				j.Error = "Conversion failed. Please try again"
+				log.Printf("job %s: failed: %v", j.ID, err)
 				return
 			}
 
 			j.OutputPath = outPath
+			log.Printf("job %s: completed", j.ID)
 		},
 	}
 

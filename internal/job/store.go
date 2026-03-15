@@ -21,6 +21,7 @@ const (
 type Job struct {
 	ID         string
 	Status     Status
+	Progress   int
 	Error      string
 	CreatedAt  time.Time
 	InputPath  string

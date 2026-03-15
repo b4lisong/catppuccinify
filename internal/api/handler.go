@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/balisong/catppuccinify/internal/job"
 )
@@ -129,8 +130,9 @@ func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]string{
-		"job_id": j.ID,
-		"status": string(j.Status),
+		"job_id":   j.ID,
+		"status":   string(j.Status),
+		"progress": strconv.Itoa(j.Progress),
 	}
 	if j.Status == job.StatusFailed {
 		resp["error"] = j.Error

@@ -21,7 +21,7 @@ func sRGBToLinear(c float64) float64 {
 // color using CIEDE2000 distance and Floyd-Steinberg dithering.
 // Error diffusion happens in sRGB space. Fully transparent pixels are
 // preserved as-is.
-func Convert(img image.Image) *image.NRGBA {
+func Convert(img image.Image, onProgress func(percent int)) *image.NRGBA {
 	bounds := img.Bounds()
 	w := bounds.Dx()
 	h := bounds.Dy()
@@ -58,6 +58,9 @@ func Convert(img image.Image) *image.NRGBA {
 	out := image.NewNRGBA(bounds)
 
 	for y := 0; y < h; y++ {
+		if onProgress != nil {
+			onProgress(y * 100 / h)
+		}
 		for x := 0; x < w; x++ {
 			idx := y*w + x
 
@@ -124,6 +127,10 @@ func Convert(img image.Image) *image.NRGBA {
 				A: alpha[idx],
 			})
 		}
+	}
+
+	if onProgress != nil {
+		onProgress(100)
 	}
 
 	return out
